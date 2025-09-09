@@ -1,0 +1,39 @@
+import pandas as pd
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
+import numpy as np
+
+# --- toy items ---
+movies = pd.DataFrame({
+    "movie_id":[1,2,3,4,5],
+    "title":["Star Wars","Dune","Amélie","The Martian","Interstellar"],
+    "plot":[
+        "space opera rebels empire lightsabers",
+        "desert planet spice prophecy houses war",
+        "whimsical romance paris cafe life",
+        "astronaut stranded mars survival science",
+        "wormholes relativity space exploration family"
+    ]
+})
+
+# --- encode items (TF-IDF over plot) ---
+tfidf = TfidfVectorizer(ngram_range=(1,2), min_df=1, stop_words="english")
+X = tfidf.fit_transform(movies["plot"])   # shape: n_items x n_terms
+
+# --- example user history (movie_id -> rating) ---
+user_ratings = {1:5, 4:4}  # liked Star Wars and The Martian
+
+# build user profile (rating-weighted average of liked item vectors)
+idx_map = {mid:i for i,mid in enumerate(movies["movie_id"])}
+rows = [idx_map[mid] for mid in user_ratings]
+weights = np.array([user_ratings[mid] for mid in user_ratings], dtype=float)
+profile = (X[rows].T @ (weights/weights.sum())).T  # 1 x n_terms sparse row
+
+# cosine scores to all items
+scores = cosine_similarity(profile, X).ravel()
+
+# recommend top-K unseen
+seen = set(user_ratings.keys())
+movies["score"] = scores
+recs = movies[~movies["movie_id"].isin(seen)].sort_values("score", ascending=False)
+print(recs[["title","score"]].head(3))
